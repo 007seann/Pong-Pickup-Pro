@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 2
+names: ['Ball', 'Racket']
+
+roboflow:
+  workspace: qchoice-vaywn
+  project: table-tennis-tr47e
+  version: 1
+  license: BY-NC-SA 4.0
+  url: https://universe.roboflow.com/qchoice-vaywn/table-tennis-tr47e/dataset/1
