@@ -15,8 +15,7 @@ Usage - sources:
                                                      'rtsp://example.com/media.mp4'  # RTSP, RTMP, HTTP stream
 
 Usage - formats:
-    $ python detect.py --weights yolov5s.pt                 # PyTorch
-                                 yolov5s.torchscript        # TorchScript
+    $ python detect.py --weights yolov5s.p           yolov5s.torchscript        # TorchScript
                                  yolov5s.onnx               # ONNX Runtime or OpenCV DNN with --dnn
                                  yolov5s_openvino_model     # OpenVINO
                                  yolov5s.engine             # TensorRT
@@ -27,14 +26,21 @@ Usage - formats:
                                  yolov5s_edgetpu.tflite     # TensorFlow Edge TPU
                                  yolov5s_paddle_model       # PaddlePaddle
 """
-
+import cv2
 import argparse
 import os
 import platform
 import sys
 from pathlib import Path
-
+import socket
+import sys
 import torch
+import nanocamera as nano
+import math
+
+ip = '10.0.0.10'
+port = 65432
+
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -54,6 +60,8 @@ from utils.torch_utils import select_device, smart_inference_mode
 def run(
         weights=ROOT / 'yolov5s.pt',  # model path or triton URL
         source=ROOT / 'data/images',  # file/dir/URL/glob/screen/0(webcam)
+        #source=ROOT / '/dev/video0',
+        #source = ROOT / 'dev/gst-launch-1.0 nvarguscamerasrc sensor_id=0 !  \'video/x-raw(memory:NVMM),width=3280, height=2464, framerate=21/1, format=NV12\' !  nvvidconv flip-method=2 ! \'video/x-raw, width=816, height=616\' !  nvvidconv ! nvegltransform ! nveglglessink -e',
         data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
         imgsz=(640, 640),  # inference size (height, width)
         conf_thres=0.25,  # confidence threshold
@@ -80,11 +88,15 @@ def run(
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
 ):
+    sock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock1.connect((ip, port))
+    #print(sock1)
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
     webcam = source.isnumeric() or source.endswith('.streams') or (is_url and not is_file)
+    #webcam = True
     screenshot = source.lower().startswith('screen')
     if is_url and is_file:
         source = check_file(source)  # download
@@ -102,6 +114,7 @@ def run(
     # Dataloader
     bs = 1  # batch_size
     if webcam:
+        # uncomment next line to show display on screen
         view_img = check_imshow(warn=True)
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
         bs = len(dataset)
@@ -171,6 +184,47 @@ def run(
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
+                        box=xyxy
+                        p1,p2 = (int(box[0]),int(box[1])), (int(box[2]),int(box[3]))
+                        x1 = [650,0]
+                        x2=[650,1000]
+                        threshold=300
+                        x3=[x1[0]-threshold,x1[1]]
+                        x4=[x2[0]-threshold,x2[1]]
+                        x5=[x1[0]+threshold,x1[1]]
+                        x6=[x2[0]+threshold,x2[1]]
+                        color = (256,0,0)
+                        cv2.line(im0,x1,x2,color,cv2.LINE_AA)
+                        cv2.line(im0,x3,x4,color,cv2.LINE_AA)
+                        cv2.line(im0,x5,x6,color,cv2.LINE_AA)
+                        ballMidX=int((p1[0]+p2[0])/2)
+                        midLine = 650
+                        idk = midLine - ballMidX
+                        if (idk > 0): 
+                            angle = int(idk/midLine * 27.5)
+                        else:
+                            angle = -(int(idk/midLine * 27.5))
+                        print("angle = " + str(angle)) 
+                        print(ballMidX)
+                        if(ballMidX>x3[0] and ballMidX < x5[0]):
+                             sent_data = "1"
+                             #angleAndDir = sent_data+str(angle)
+                             print(sent_data)
+                             sock1.sendall(sent_data.encode('utf-8'))  
+                        elif(ballMidX<x3[0]):
+                             sent_data = "0"
+                             #angleAndDir = sent_data+str(angle)
+                             print(sent_data)
+                             sock1.sendall(sent_data.encode('utf-8'))
+                             
+                        else:
+                             sent_data = "2"
+                             print(sent_data)
+                             #angleAndDir = sent_data+str(angle)
+                             sock1.sendall(sent_data.encode('utf-8'))
+                             #sock1.sendall(sent_data.encode('utf-8'))
+                             
+
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -249,6 +303,22 @@ def parse_opt():
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(vars(opt))
     return opt
+'''
+def read_cam():
+    # cap = cv2.VideoCapture("nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080,format=(string)NV12, framerate=(fraction)30/1 ! nvvidconv ! video/x-raw, format=(string)BGRx ! videoconvert !  appsink")
+    cap = cv2.VideoCapture("nvarguscamerasrc sensor_id=0 ! video/x-raw(memory:NVMM),width=3280, height=2464, framerate=21/1, format=(string)NV12 !  nvvidconv flip-method=2 ! video/x-raw, width=816, height=616 !  nvvidconv ! nvegltransform ! nveglglessink -e")
+    if cap.isOpened():
+        cv2.namedWindow("demo", cv2.WINDOW_AUTOSIZE)
+        while True:
+            ret_val, img = cap.read()
+            cv2.imshow('demo',img)
+            cv2.waitKey(10)
+    else:
+        print("camera open failed")
+
+    cv2.destroyAllWindows()
+'''
+
 
 
 def main(opt):
@@ -256,6 +326,8 @@ def main(opt):
     run(**vars(opt))
 
 
+
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
+    '''read_cam()'''

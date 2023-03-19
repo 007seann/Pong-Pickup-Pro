@@ -360,10 +360,13 @@ class LoadStreams:
                 import pafy
                 s = pafy.new(s).getbest(preftype="mp4").url  # YouTube URL
             s = eval(s) if s.isnumeric() else s  # i.e. s = '0' local webcam
+            print(s)
             if s == 0:
                 assert not is_colab(), '--source 0 webcam unsupported on Colab. Rerun command in a local environment.'
                 assert not is_kaggle(), '--source 0 webcam unsupported on Kaggle. Rerun command in a local environment.'
+            # s = "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080,format=(string)NV12, framerate=(fraction)30/1 ! nvvidconv ! video/x-raw, format=(string)BGRx ! videoconvert ! appsink"
             cap = cv2.VideoCapture(s)
+            #cap = cv2.VideoCapture(cv2.CAP_V4L2)
             assert cap.isOpened(), f'{st}Failed to open {s}'
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -384,6 +387,27 @@ class LoadStreams:
         self.transforms = transforms  # optional
         if not self.rect:
             LOGGER.warning('WARNING ⚠️ Stream shapes differ. For optimal performance supply similarly-shaped streams.')
+
+    def _gstreamer_pipeline(
+        self,
+        sensor_id=0,
+        capture_width=3280,
+        capture_height=2464,
+        display_width=816,
+        display_height=616,
+        framerate=21/1,
+        flip_method=0,
+    ):
+        return (
+            "nvarguscamerasrc ! "
+            "video/x-raw(memory:NVMM), "
+            f"width=(int){capture_width}, height=(int){capture_height}, "
+            f"format=(string)NV12, framerate=(fraction){framerate}/1 ! "
+            f"nvvidconv flip-method={flip_method} ! "
+            f"video/x-raw, width=(int){display_width}, height=(int){display_height}, format=(string)BGRx ! "
+            "videoconvert ! "
+            "video/x-raw, format=(string)BGR ! appsink"
+        )
 
     def update(self, i, cap, stream):
         # Read stream `i` frames in daemon thread
