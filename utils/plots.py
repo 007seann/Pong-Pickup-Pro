@@ -72,6 +72,8 @@ class Annotator:
     # YOLOv5 Annotator for train/val mosaics and jpgs and detect/hub inference annotations
     def __init__(self, im, line_width=None, font_size=None, font='Arial.ttf', pil=False, example='abc'):
         assert im.data.contiguous, 'Image not contiguous. Apply np.ascontiguousarray(im) to Annotator() input images.'
+        # added one line below this comment
+        self.boxes = []
         non_ascii = not is_ascii(example)  # non-latin labels, i.e. asian, arabic, cyrillic
         self.pil = pil or non_ascii
         if self.pil:  # use PIL
@@ -82,6 +84,42 @@ class Annotator:
         else:  # use cv2
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
+
+    def findClosestBall(self):
+        if (self.boxes):
+            if (len(self.boxes) == 1):
+                #print("only one ball")
+                return self.boxes[0]
+            else:
+                #print("checking max size of bounding boxes for all balls")
+                #print("max now set to ")
+                max = self.boxes[0]
+                #print(max)
+                maxWidth = max[1][0] - max[0][0]
+                #print("current width of bounding box = " )
+               # print(maxWidth)
+                #print("calculation of max width = ") 
+               # print(max[1][0]) 
+               # print("minus")
+               # print(max[0][0])
+             
+                for x in self.boxes:
+                    #print("comparing all boxes in list")
+                   # print("current box = ")
+                   # print(x)
+                    #print("current width = ")
+                    #print(x[1][0] - x[0][0])
+                    #print("calculation of max width = ")
+                    #print(x[1][0])
+                    #print("minus")
+                   # print(x[0][0])
+                    if ((x[1][0] - x[0][0]) > maxWidth):
+                       # print("new max = ")
+                        #print(x)
+                        max = x;
+                        #print(max);
+                return max;
+            
 
     def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
         # Add one xyxy box to image with label
@@ -100,6 +138,8 @@ class Annotator:
                 self.draw.text((box[0], box[1] - h if outside else box[1]), label, fill=txt_color, font=self.font)
         else:  # cv2
             p1, p2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
+            # added one line below this comment
+            self.boxes.append((p1,p2))
             cv2.rectangle(self.im, p1, p2, color, thickness=self.lw, lineType=cv2.LINE_AA)
             if label:
                 tf = max(self.lw - 1, 1)  # font thickness

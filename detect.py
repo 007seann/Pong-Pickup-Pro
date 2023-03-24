@@ -84,7 +84,7 @@ def run(
         line_thickness=3,  # bounding box thickness (pixels)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
-        half=False,  # use FP16 half-precision inference
+        half=True,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
 ):
@@ -185,9 +185,15 @@ def run(
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         box=xyxy
-                        p1,p2 = (int(box[0]),int(box[1])), (int(box[2]),int(box[3]))
-                        x1 = [650,0]
-                        x2=[650,1000]
+                        p1,p2 = annotator.findClosestBall()
+                        print("in detect.py")
+                        print("p1 = ")
+                        print(p1)
+                        print("p2 = ") 
+                        print(p2)
+                        #p1,p2 = (int(box[0]),int(box[1])), (int(box[2]),int(box[3]))
+                        x1 = [975,0]
+                        x2=[975,1200]
                         threshold=300
                         x3=[x1[0]-threshold,x1[1]]
                         x4=[x2[0]-threshold,x2[1]]
@@ -198,13 +204,14 @@ def run(
                         cv2.line(im0,x3,x4,color,cv2.LINE_AA)
                         cv2.line(im0,x5,x6,color,cv2.LINE_AA)
                         ballMidX=int((p1[0]+p2[0])/2)
-                        midLine = 650
+                        print("ballMidX")
+                        midLine = x1[0]
                         idk = midLine - ballMidX
                         if (idk > 0): 
-                            angle = int(idk/midLine * 27.5)
+                            angle = (idk/midLine * 55)
                         else:
-                            angle = -(int(idk/midLine * 27.5))
-                        print("angle = " + str(angle)) 
+                            angle = -(idk/midLine * 55)
+                        #print("angle = " + str(angle)) 
                         print(ballMidX)
                         if(ballMidX>x3[0] and ballMidX < x5[0]):
                              sent_data = "1"
@@ -222,7 +229,6 @@ def run(
                              print(sent_data)
                              #angleAndDir = sent_data+str(angle)
                              sock1.sendall(sent_data.encode('utf-8'))
-                             #sock1.sendall(sent_data.encode('utf-8'))
                              
 
                     if save_crop:

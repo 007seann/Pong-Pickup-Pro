@@ -1,0 +1,23 @@
+Lidar Manual
+
+How to use Lidar and use Hector_Slam 
+Follow this direction
+
+ Execute $cd catkin_ws/
+ Execute $roscore
+ Don’t close this terminal
+ Open new the second terminal
+ Execute this $cd catkin_ws/ on the new terminal
+ Execute this $ ls -l /dev | grep ttyUSB command to check ttyUSB0
+ Execute $ sudo chmod 666 /dev/ttyUSB0
+ Execute $ source devel/setup.bash
+ Execute $ roslaunch rplidar_ros rplidar.launch
+ Don’t close the second terminal
+ Open new the thrid terminal
+ Execute this $cd catkin_ws/ on the new terminal
+ Execute this $ ls -l /dev | grep ttyUSB command to check ttyUSB0
+ Execute $ sudo chmod 666 /dev/ttyUSB0
+ Execute $ source devel/setup.bash
+ Execute $ roslaunch hector_slam_launch tutorial.launch 
+  
+
