@@ -37,6 +37,58 @@ import sys
 import torch
 import nanocamera as nano
 import math
+from motors import Motors 
+from time import time, sleep
+import RPi.GPIO as GPIO
+from rplidar import RPLidar
+
+TRIG = 24
+ECHO = 23
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(17, GPIO.IN)
+GPIO.setwarnings(False)
+GPIO.setup(TRIG,GPIO.OUT)
+GPIO.setup(ECHO,GPIO.IN)
+i = GPIO.input(17)
+
+mc = Motors() 
+
+motor_id = 0
+
+in1 = 17
+in2 = 18
+in3 = 27
+in4 = 22
+
+# careful lowering this, at some point you run into the mechanical limitation of how quick your motor can move
+step_sleep = 0.002
+
+step_count = int(1* (1024))  # 5.625*(1/64) per step, 4096 steps is 360°
+
+direction = True # True for clockwise, False for counter-clockwise
+
+# defining stepper motor sequence (found in documentation http://www.4tronix.co.uk/arduino/Stepper-Motors.php)
+step_sequence = [[1,1,0,0],
+                 [0,1,1,0],
+                 [0,0,1,1],
+                 [1,0,0,1]]
+
+# setting up
+GPIO.setmode( GPIO.BCM )
+GPIO.setup(in1, GPIO.OUT )
+GPIO.setup(in2, GPIO.OUT )
+GPIO.setup(in3, GPIO.OUT )
+GPIO.setup(in4, GPIO.OUT )
+
+# initializing
+GPIO.output(in1, GPIO.LOW )
+GPIO.output(in2, GPIO.LOW )
+GPIO.output(in3, GPIO.LOW )
+GPIO.output(in4, GPIO.LOW )
+
+motor_pins = [in1,in2,in3,in4]
+motor_step_counter = 0
 
 ip = '10.0.0.10'
 port = 65432
@@ -55,6 +107,21 @@ from utils.general import (LOGGER, Profile, check_file, check_img_size, check_im
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, smart_inference_mode
 
+def spin_gate():
+    global motor_step_counter
+    
+    for i in range(step_count):
+        print("doing")
+        for pin in range(0, len(motor_pins)):
+            GPIO.output( motor_pins[pin], step_sequence[motor_step_counter][pin] )
+        if direction==True:
+            motor_step_counter = (motor_step_counter - 1) % 4
+        elif direction==False:
+            motor_step_counter = (motor_step_counter + 1) % 4
+        else: # defensive programming
+            print( "uh oh... direction should *always* be either True or False" )
+            cleanup()
+        sleep(step_sleep)
 
 @smart_inference_mode()
 def run(
@@ -91,6 +158,7 @@ def run(
     sock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock1.connect((ip, port))
     #print(sock1)
+    #lidar = RPLidar('/dev/ttyUSB0')
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -127,6 +195,8 @@ def run(
     # Run inference
     model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
+    ballClose = False
+    count = 0
     for path, im, im0s, vid_cap, s in dataset:
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
@@ -172,6 +242,7 @@ def run(
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                    
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     if save_txt:  # Write to file
@@ -185,54 +256,75 @@ def run(
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         box=xyxy
-                        p1,p2 = annotator.findClosestBall()
-                        print("in detect.py")
-                        print("p1 = ")
-                        print(p1)
-                        print("p2 = ") 
-                        print(p2)
-                        #p1,p2 = (int(box[0]),int(box[1])), (int(box[2]),int(box[3]))
-                        x1 = [975,0]
-                        x2=[975,1200]
-                        threshold=300
-                        x3=[x1[0]-threshold,x1[1]]
-                        x4=[x2[0]-threshold,x2[1]]
-                        x5=[x1[0]+threshold,x1[1]]
-                        x6=[x2[0]+threshold,x2[1]]
-                        color = (256,0,0)
-                        cv2.line(im0,x1,x2,color,cv2.LINE_AA)
-                        cv2.line(im0,x3,x4,color,cv2.LINE_AA)
-                        cv2.line(im0,x5,x6,color,cv2.LINE_AA)
-                        ballMidX=int((p1[0]+p2[0])/2)
-                        print("ballMidX")
-                        midLine = x1[0]
-                        idk = midLine - ballMidX
-                        if (idk > 0): 
-                            angle = (idk/midLine * 55)
-                        else:
-                            angle = -(idk/midLine * 55)
-                        #print("angle = " + str(angle)) 
-                        print(ballMidX)
-                        if(ballMidX>x3[0] and ballMidX < x5[0]):
-                             sent_data = "1"
-                             #angleAndDir = sent_data+str(angle)
-                             print(sent_data)
-                             sock1.sendall(sent_data.encode('utf-8'))  
-                        elif(ballMidX<x3[0]):
-                             sent_data = "0"
-                             #angleAndDir = sent_data+str(angle)
-                             print(sent_data)
-                             sock1.sendall(sent_data.encode('utf-8'))
-                             
-                        else:
-                             sent_data = "2"
-                             print(sent_data)
-                             #angleAndDir = sent_data+str(angle)
-                             sock1.sendall(sent_data.encode('utf-8'))
-                             
-
+                        
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+
+                #find closest ball in annotator object and send info to pi
+                p1,p2 = annotator.findClosestBall()
+                if (p2[0] - p1[0] > 50):
+                    print(p2[0] - p1[0])
+                    # turn on fan when ball is close
+                    if (ballClose == False):
+                        mc.move_motor(0,100)
+                        #fan_off = "3"
+                        #sock1.sendall(fan_off.encode('utf-8'))
+                        ballClose = True
+                    #else:
+                        #count = 0
+
+                # set middle line 
+                x1 = [975,0]
+                x2=[975,1200]
+                threshold=200
+                x3=[x1[0]-threshold,x1[1]]
+                x4=[x2[0]-threshold,x2[1]]
+                x5=[x1[0]+threshold,x1[1]]
+                x6=[x2[0]+threshold,x2[1]]
+                color = (256,0,0)
+                cv2.line(im0,x1,x2,color,cv2.LINE_AA)
+                cv2.line(im0,x3,x4,color,cv2.LINE_AA)
+                cv2.line(im0,x5,x6,color,cv2.LINE_AA)
+                ballMidX=(p1[0]+p2[0])/2
+                midLine = x1[0]
+                idk = midLine - ballMidX
+                if (idk > 0): 
+                    angle = (idk/midLine * 55)
+                else:
+                    angle = -(idk/midLine * 55)
+        
+                if(ballMidX>x3[0] and ballMidX < x5[0]):
+                    sent_data = "1"
+                     
+                elif(ballMidX<x3[0]):
+                    sent_data = "0"
+ 
+                else:
+                    sent_data = "2"
+
+                
+                 #send data to pi
+                #if (lidar() == 0):
+                    #sent_data = "2"
+                    
+                #elif (lidar() == 1):
+                    #sent_data = "0"
+           
+                sock1.sendall(sent_data.encode('utf-8'))
+
+            else:
+                sent_data = "3" 
+                sock1.sendall(sent_data.encode('utf-8')) 
+                if (ballClose):
+                    count+=1
+                    if (count > 20):
+                        mc.stop_motor(0)
+                        #fan_off = "4"
+                        #sock1.sendall(fan_off.encode('utf-8'))
+                        ballClose = False
+                        count = 0
+                
+                    
 
             # Stream results
             im0 = annotator.result()
@@ -325,6 +417,36 @@ def read_cam():
     cv2.destroyAllWindows()
 '''
 
+def lidar():
+    lidar = RPLidar('/dev/ttyUSB0')
+    safe_distance = 400
+    found = False
+    for scan in (lidar.iter_scans()):
+        for j in scan:
+            dis,ang = j[2], j[1]
+            if (dis < safe_distance and 90<=ang<=270):
+                found = True
+                if (180<ang<=270): 
+                    #print("On the Right")
+                    lidar.stop()
+                    lidar.stop_motor()
+                    lidar.disconnect()
+                    return 0
+                if (90<=ang<=180): 
+                    #print("On the left")
+                    lidar.stop()
+                    lidar.stop_motor()
+                    lidar.disconnect()
+                    return 2
+            #print(f"Angle: {ang}\n\nDistance: {dis}")
+        if (found): break
+    lidar.stop()
+    lidar.stop_motor()
+    lidar.disconnect()
+    return None
+
+
+
 
 
 def main(opt):
@@ -334,6 +456,24 @@ def main(opt):
 
 
 if __name__ == "__main__":
-    opt = parse_opt()
-    main(opt)
+    try:
+       opt = parse_opt()
+       main(opt)
+    except KeyboardInterrupt:
+       spin_gate()
+       sleep(2)
+       spin_gate()
+       for i in range(1, 21):
+           mc.move_motor(1, i*5)
+           sleep(0.25)
+       sleep(5)
+       mc.move_motor(1, 70)
+       sleep(1)
+       mc.move_motor(1, 50)
+       sleep(1)
+       mc.move_motor(1, 30)
+       sleep(1)
+       mc.move_motor(1, 25)
+       sleep(1)
+       mc.stop_motor(1)
     '''read_cam()'''
