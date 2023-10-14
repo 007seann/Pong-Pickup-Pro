@@ -14,7 +14,7 @@ This project consists of an autonomous robot tasked with collecting ping pong ba
 
 Here is a [YouTube presentation](https://youtube.com/shorts/jVamBR7NoEc?feature=shared) of the project. </br>
 
-Here are the relevant documents for the project. 
+Here are [the relevant documents](https://github.com/007seann/Pong-Pickup-Pro/tree/ee2234f18c8329ad9c5b863a30b7155e92f4e1e4/documents) for the project. 
 
 
 # Project Design
