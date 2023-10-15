@@ -32,3 +32,7 @@ Here are [the relevant documents](https://github.com/007seann/Pong-Pickup-Pro/tr
 
 # Test Outcome
 ![PPP test](https://github.com/007seann/Pong-Pickup-Pro/blob/902d067e54840020d80ea893cf08a1c365ee2d70/test1.png)
+
+
+# Award
+the finest performance prize by Amazon
